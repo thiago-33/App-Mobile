@@ -1,83 +1,63 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, Button, FlatList, StyleSheet } from 'react-native';
+const express = require('express');
+const bodyParser = require('body-parser');
+const QRCodeReader = require('qrcode-reader');
+const Jimp = require('jimp'); // Biblioteca para manipulação de imagens
+const request = require('request'); // Para fazer o download da imagem da URL
 
-const App = () => {
-  const [tipoMaterial, setTipoMaterial] = useState('');
-  const [quantidade, setQuantidade] = useState('');
-  const [historico, setHistorico] = useState([]);
+const app = express();
+app.use(bodyParser.json());
 
-  const adicionarReciclagem = () => {
-    if (tipoMaterial && quantidade) {
-      const novoRegistro = {
-        id: Math.random().toString(), // Gera um ID único
-        tipoMaterial,
-        quantidade,
-        data: new Date().toLocaleDateString(), // Data atual
-      };
-
-      setHistorico((prevHistorico) => [novoRegistro, ...prevHistorico]);
-      setTipoMaterial(''); // Limpa o campo após adicionar
-      setQuantidade('');   // Limpa o campo após adicionar
-    } else {
-      alert('Por favor, preencha todos os campos.'); // Mensagem de alerta se os campos estiverem vazios
-    }
-  };
-
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Histórico de Reciclagem</Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Tipo de Material"
-        value={tipoMaterial}
-        onChangeText={setTipoMaterial}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Quantidade (kg)"
-        value={quantidade}
-        onChangeText={setQuantidade}
-        keyboardType="numeric"
-      />
-      <Button title="Adicionar Registro" onPress={adicionarReciclagem} />
-
-      <FlatList
-        data={historico}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={styles.item}>
-            <Text>{item.data}: {item.tipoMaterial} - {item.quantidade} kg</Text>
-          </View>
-        )}
-      />
-    </View>
-  );
+// Função para gerar o link do mapa
+const generateMapLink = (coordinates) => {
+  return `https://www.google.com/maps/search/?api=1&query=${coordinates.lat},${coordinates.lng}`;
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: '#f8f8f8',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 20,
-  },
-  input: {
-    height: 40,
-    borderColor: 'gray',
-    borderWidth: 1,
-    marginBottom: 10,
-    paddingHorizontal: 10,
-  },
-  item: {
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ccc',
-  },
+// Função para encontrar o ponto de coleta
+const findRecyclingPoint = (productInfo) => {
+    // Lógica para encontrar o ponto de coleta mais próximo
+    return {
+        name: 'Ponto de Coleta Exemplo',
+        address: 'Rua Exemplo, 123, São Paulo, SP',
+        coordinates: { lat: -23.55052, lng: -46.633308 }
+    };
+};
+
+// Endpoint /scan
+app.post('/scan', async (req, res) => {
+    const { imageUrl } = req.body;
+
+    try {
+        // Baixa a imagem se a URL for remota
+        const image = await Jimp.read(imageUrl);
+        const qr = new QRCodeReader();
+
+        qr.callback = (err, value) => {
+            if (err) {
+                return res.status(400).json({ error: 'Erro ao ler o QR code' });
+            }
+
+            const productInfo = value.result;
+            // Aqui você pode adicionar lógica para buscar o ponto de coleta mais próximo
+            const recyclingPoint = findRecyclingPoint(productInfo);
+
+            // Gera o link do mapa
+            const mapLink = generateMapLink(recyclingPoint.coordinates);
+
+            res.json({
+                productInfo,
+                recyclingPoint,
+                mapLink
+            });
+        };
+
+        qr.decode(image.bitmap);
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao processar a imagem' });
+    }
 });
 
-export default App;
+// Inicia o servidor
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Servidor rodando na porta ${PORT}`);
+});
